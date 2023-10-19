@@ -56,10 +56,35 @@ async function run() {
     });
 
     // get signle product based on product id
-    app.get('/update-product/:productId', async (req, res) => {
+    app.get('/:productId', async (req, res) => {
       const { productId } = req.params;
       const query = { _id: new ObjectId(productId) };
       const product = await productsCollection.find(query).toArray();
+      res.send(product);
+    });
+
+    // update signle product based on product id
+    app.put('/update-product/:productId', async (req, res) => {
+      const { productId } = req.params;
+      const updateProduct = req.body;
+      const query = { _id: new ObjectId(productId) };
+      const options = { upsert: true };
+      const productWithUpdataData = {
+        $set: {
+          proName: updateProduct.proName,
+          brand: updateProduct.brand,
+          category: updateProduct.category,
+          price: updateProduct.price,
+          rating: updateProduct.rating,
+          photoUrl: updateProduct.photoUrl,
+          desc: updateProduct.desc,
+        },
+      };
+      const product = await productsCollection.updateOne(
+        query,
+        productWithUpdataData,
+        options
+      );
       res.send(product);
     });
 
