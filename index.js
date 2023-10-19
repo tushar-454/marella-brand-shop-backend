@@ -38,6 +38,14 @@ async function run() {
       res.send(cursor);
     });
 
+    // delete cart item from database
+    app.delete('/carts/:productId', async (req, res) => {
+      const { productId } = req.params;
+      const filter = { _id: productId };
+      const result = await addToCartCollection.deleteOne(filter);
+      res.send(result);
+    });
+
     // add a product in database
     app.post('/product', async (req, res) => {
       const productObj = req.body;
