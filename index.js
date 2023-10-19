@@ -30,6 +30,7 @@ async function run() {
 
     const brandShopDB = client.db('brandShopDB');
     const productsCollection = brandShopDB.collection('products');
+    const addToCartCollection = brandShopDB.collection('carts');
 
     // add a product in database
     app.post('/product', async (req, res) => {
@@ -86,6 +87,12 @@ async function run() {
         options
       );
       res.send(product);
+    });
+
+    app.post('/carts', async (req, res) => {
+      const cartProduct = req.body;
+      const result = await addToCartCollection.insertOne(cartProduct);
+      res.send(result);
     });
 
     await client.db('admin').command({ ping: 1 });
