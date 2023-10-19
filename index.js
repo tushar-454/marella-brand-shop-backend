@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -47,11 +47,20 @@ async function run() {
     // get product based on brand
     app.get('/brand/:brand', async (req, res) => {
       const { brand } = req.params;
-      const products = await productsCollection.find().toArray();
-      const brandProduct = products.filter(
-        (product) => product.brand.toLowerCase() === brand
-      );
-      res.send(brandProduct);
+      const query = { brand: brand.charAt(0).toUpperCase() + brand.slice(1) };
+      const products = await productsCollection.find(query).toArray();
+      // const brandProduct = products.filter(
+      //   (product) => product.brand.toLowerCase() === brand
+      // );
+      res.send(products);
+    });
+
+    // get signle product based on product id
+    app.get('/update-product/:productId', async (req, res) => {
+      const { productId } = req.params;
+      const query = { _id: new ObjectId(productId) };
+      const product = await productsCollection.find(query).toArray();
+      res.send(product);
     });
 
     await client.db('admin').command({ ping: 1 });
