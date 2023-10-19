@@ -39,9 +39,9 @@ async function run() {
     });
 
     // delete cart item from database
-    app.delete('/carts/:productId', async (req, res) => {
-      const { productId } = req.params;
-      const filter = { _id: productId };
+    app.delete('/carts/:uid/:productId', async (req, res) => {
+      const { uid, productId } = req.params;
+      const filter = { _id: new ObjectId(productId), uid: uid };
       const result = await addToCartCollection.deleteOne(filter);
       res.send(result);
     });
