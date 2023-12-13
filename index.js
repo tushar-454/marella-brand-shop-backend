@@ -4,15 +4,19 @@ const cors = require('cors');
 require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 4000;
+const cookieParser = require('cookie-parser');
 const stripe = require('stripe')(process.env.STRIPE_SERECT_KEY);
+const jwt = require('jsonwebtoken');
 
 // middleware
-const corsConfig = {
-  origin: '*',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-};
-app.use(cors());
+app.use(
+  cors({
+    origin: 'http://localhost:5173',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  })
+);
+app.use(cookieParser());
 app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@karim.mjbii6i.mongodb.net/?retryWrites=true&w=majority`;
@@ -33,14 +37,65 @@ async function run() {
     const productsCollection = brandShopDB.collection('products');
     const addToCartCollection = brandShopDB.collection('carts');
     const allPaymentCollection = brandShopDB.collection('payments');
+    const allUsersCollection = brandShopDB.collection('users');
+
+    const verifyUser = async (req, res, next) => {
+      const token = req?.cookies?.token;
+      if (!token) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+      const decode = jwt.verify(token, process.env.JWT_SERECT_KEY);
+      const user = await allUsersCollection.findOne({ email: decode.email });
+      if (!user) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+      req.user = decode;
+      next();
+    };
+
+    app.get('/users', async (req, res) => {
+      const result = await allUsersCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.post('/users', async (req, res) => {
+      const { email } = req.body;
+      console.log(email);
+      const result = await allUsersCollection.insertOne({ email });
+      res.send({ message: 'success' });
+    });
+
+    // jwt token related api
+    app.post('/jwt-token', async (req, res) => {
+      const userInfo = req.body;
+      const token = jwt.sign(userInfo, process.env.JWT_SERECT_KEY, {
+        expiresIn: '1h',
+      });
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+      });
+      res.send({ success: true });
+    });
+
+    // remove token
+    app.get('/remove-token', async (req, res) => {
+      res.clearCookie('token', {
+        maxAge: 0,
+        secure: true,
+        sameSite: 'none',
+      });
+      res.send({ success: true });
+    });
 
     // get cart data from cart collection
-    app.get('/carts', async (req, res) => {
+    app.get('/carts', verifyUser, async (req, res) => {
       const cursor = await addToCartCollection.find().toArray();
       res.send(cursor);
     });
 
-    app.get('/payment-history', async (req, res) => {
+    app.get('/payment-history', verifyUser, async (req, res) => {
       const { uid } = req.query;
       const query = {};
       if (uid) {
@@ -51,28 +106,32 @@ async function run() {
     });
 
     // delete cart item from database
-    app.delete('/carts/:uid/:productId', async (req, res) => {
-      const { uid, productId } = req.params;
-      const filter = { _id: new ObjectId(productId), uid: uid };
-      const result = await addToCartCollection.deleteOne(filter);
-      res.send(result);
+    app.delete('/carts/:uid/:productId', verifyUser, async (req, res) => {
+      try {
+        const { uid, productId } = req.params;
+        const filter = { _id: new ObjectId(productId), uid: uid };
+        const result = await addToCartCollection.deleteOne(filter);
+        res.send(result);
+      } catch (error) {
+        res.send({ message: 'error' });
+      }
     });
 
     // add a product in database
-    app.post('/product', async (req, res) => {
+    app.post('/product', verifyUser, async (req, res) => {
       const productObj = req.body;
       const result = await productsCollection.insertOne(productObj);
       res.send(result);
     });
 
     // all products get api end point
-    app.get('/products', async (req, res) => {
+    app.get('/products', verifyUser, async (req, res) => {
       const cursor = await productsCollection.find().toArray();
       res.send(cursor);
     });
 
     // get product based on brand
-    app.get('/brand/:brand', async (req, res) => {
+    app.get('/brand/:brand', verifyUser, async (req, res) => {
       const { brand } = req.params;
       const query = { brand: brand.charAt(0).toUpperCase() + brand.slice(1) };
       const products = await productsCollection.find(query).toArray();
@@ -83,7 +142,7 @@ async function run() {
     });
 
     // get signle product based on product id
-    app.get('/:productId', async (req, res) => {
+    app.get('/:productId', verifyUser, async (req, res) => {
       const { productId } = req.params;
       const query = { _id: new ObjectId(productId) };
       const product = await productsCollection.find(query).toArray();
@@ -91,7 +150,7 @@ async function run() {
     });
 
     // update signle product based on product id
-    app.put('/update-product/:productId', async (req, res) => {
+    app.put('/update-product/:productId', verifyUser, async (req, res) => {
       const { productId } = req.params;
       const updateProduct = req.body;
       const query = { _id: new ObjectId(productId) };
@@ -116,14 +175,14 @@ async function run() {
     });
 
     // post cart product in database
-    app.post('/carts', async (req, res) => {
+    app.post('/carts', verifyUser, async (req, res) => {
       const cartProduct = req.body;
       const result = await addToCartCollection.insertOne(cartProduct);
       res.send(result);
     });
 
     // payment intent
-    app.post('/create-payment-intent', async (req, res) => {
+    app.post('/create-payment-intent', verifyUser, async (req, res) => {
       const { price } = req.body;
       const amount = parseInt(price * 100);
       const paymentIntent = await stripe.paymentIntents.create({
@@ -136,7 +195,7 @@ async function run() {
       });
     });
 
-    app.post('/payments', async (req, res) => {
+    app.post('/payments', verifyUser, async (req, res) => {
       const { payment } = req.body;
       const paymentResult = await allPaymentCollection.insertOne(payment);
 
