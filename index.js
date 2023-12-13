@@ -11,7 +11,7 @@ const jwt = require('jsonwebtoken');
 // middleware
 app.use(
   cors({
-    origin: 'http://localhost:5173',
+    origin: 'https://marella-brand-shop.web.app',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   })
