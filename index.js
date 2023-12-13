@@ -4,6 +4,7 @@ const cors = require('cors');
 require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 4000;
+const stripe = require('stripe')(process.env.STRIPE_SERECT_KEY);
 
 // middleware
 const corsConfig = {
@@ -31,11 +32,22 @@ async function run() {
     const brandShopDB = client.db('brandShopDB');
     const productsCollection = brandShopDB.collection('products');
     const addToCartCollection = brandShopDB.collection('carts');
+    const allPaymentCollection = brandShopDB.collection('payments');
 
     // get cart data from cart collection
     app.get('/carts', async (req, res) => {
       const cursor = await addToCartCollection.find().toArray();
       res.send(cursor);
+    });
+
+    app.get('/payment-history', async (req, res) => {
+      const { uid } = req.query;
+      const query = {};
+      if (uid) {
+        query.uid = uid;
+      }
+      const result = await allPaymentCollection.find(query).toArray();
+      res.send(result);
     });
 
     // delete cart item from database
@@ -108,6 +120,34 @@ async function run() {
       const cartProduct = req.body;
       const result = await addToCartCollection.insertOne(cartProduct);
       res.send(result);
+    });
+
+    // payment intent
+    app.post('/create-payment-intent', async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card'],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    app.post('/payments', async (req, res) => {
+      const { payment } = req.body;
+      const paymentResult = await allPaymentCollection.insertOne(payment);
+
+      // delete each item from cart
+      const query = {
+        _id: {
+          $in: payment.cartIds.map((id) => new ObjectId(id)),
+        },
+      };
+      const deleteResult = await addToCartCollection.deleteMany(query);
+      res.send({ paymentResult, deleteResult });
     });
 
     await client.db('admin').command({ ping: 1 });
